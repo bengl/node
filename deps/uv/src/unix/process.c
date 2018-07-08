@@ -594,3 +594,18 @@ void uv__process_close(uv_process_t* handle) {
   if (QUEUE_EMPTY(&handle->loop->process_handles))
     uv_signal_stop(&handle->loop->child_watcher);
 }
+
+void uv_exec(const char* file, const char* argv[]) {
+  int desc;
+  for (desc = 0; desc < 3; desc++) {
+    int flags = fcntl(desc, F_GETFD, 0);
+    if (flags <  0)
+      continue; // if reading failed
+
+    flags &= ~FD_CLOEXEC; //clear FD_CLOEXEC bit
+    fcntl(desc, F_SETFD, flags);
+  }
+  execvp(file, argv);
+  uv__write_int(1, UV__ERR(errno));
+  _exit(127);
+}

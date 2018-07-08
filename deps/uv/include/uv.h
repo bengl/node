@@ -982,6 +982,7 @@ UV_EXTERN int uv_spawn(uv_loop_t* loop,
                        const uv_process_options_t* options);
 UV_EXTERN int uv_process_kill(uv_process_t*, int signum);
 UV_EXTERN int uv_kill(int pid, int signum);
+UV_EXTERN void uv_exec(const char* file, const char* argv []);
 UV_EXTERN uv_pid_t uv_process_get_pid(const uv_process_t*);
 
 

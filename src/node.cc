@@ -2265,6 +2265,7 @@ void SetupProcessObject(Environment* env,
     env->SetMethod(process, "abort", Abort);
     env->SetMethod(process, "chdir", Chdir);
     env->SetMethod(process, "umask", Umask);
+    env->SetMethod(process, "exec", Exec);
   }
   env->SetMethod(process, "_getActiveRequests", GetActiveRequests);
   env->SetMethod(process, "_getActiveHandles", GetActiveHandles);

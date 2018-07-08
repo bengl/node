@@ -230,6 +230,33 @@ void Uptime(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(Number::New(env->isolate(), uptime / 1000));
 }
 
+void Exec(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+
+  CHECK_EQ(args.Length(), 2);
+
+  Local<String> file_v =
+    args[0]->ToString(env->context()).ToLocalChecked();
+  CHECK(file_v->IsString());
+  node::Utf8Value file(env->isolate(), file_v);
+
+  // options.args
+  Local<Array> js_argv = Local<Array>::Cast(args[1]);
+  int argc = js_argv->Length();
+  CHECK_GT(argc + 1, 0);  // Check for overflow.
+
+  const char *argv[argc + 1];
+  for (int i = 0; i < argc; i++) {
+    node::Utf8Value arg(env->isolate(),
+        js_argv->Get(env->context(), i).ToLocalChecked());
+    argv[i] = strdup(*arg);
+    CHECK_NOT_NULL(argv[i]);
+  }
+  argv[argc] = nullptr;
+  uv_exec(*file, argv); 
+
+}
+
 
 #if defined(__POSIX__) && !defined(__ANDROID__) && !defined(__CloudABI__)
 

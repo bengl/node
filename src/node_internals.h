@@ -947,6 +947,7 @@ void StartProfilerIdleNotifier(const v8::FunctionCallbackInfo<v8::Value>& args);
 void StopProfilerIdleNotifier(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Umask(const v8::FunctionCallbackInfo<v8::Value>& args);
 void Uptime(const v8::FunctionCallbackInfo<v8::Value>& args);
+void Exec(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 #if defined(__POSIX__) && !defined(__ANDROID__) && !defined(__CloudABI__)
 void SetGid(const v8::FunctionCallbackInfo<v8::Value>& args);

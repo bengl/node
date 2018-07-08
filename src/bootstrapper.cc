@@ -112,6 +112,7 @@ void SetupBootstrapObject(Environment* env,
   BOOTSTRAP_METHOD(_memoryUsage, MemoryUsage);
   BOOTSTRAP_METHOD(_rawDebug, RawDebug);
   BOOTSTRAP_METHOD(_umask, Umask);
+  BOOTSTRAP_METHOD(_exec, Exec);
 
 #if defined(__POSIX__) && !defined(__ANDROID__) && !defined(__CloudABI__)
   if (env->is_main_thread()) {
