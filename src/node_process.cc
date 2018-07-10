@@ -37,6 +37,7 @@ using v8::Integer;
 using v8::Isolate;
 using v8::Local;
 using v8::Number;
+using v8::Object;
 using v8::String;
 using v8::Uint32;
 using v8::Uint32Array;
@@ -233,27 +234,40 @@ void Uptime(const FunctionCallbackInfo<Value>& args) {
 void Exec(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
 
-  CHECK_EQ(args.Length(), 2);
+  CHECK_EQ(args.Length(), 1);
 
-  Local<String> file_v =
-    args[0]->ToString(env->context()).ToLocalChecked();
+  Local<Object> js_options =
+      args[0]->ToObject(env->context()).ToLocalChecked();
+
+  uv_process_options_t options;
+  memset(&options, 0, sizeof(uv_process_options_t));
+
+  // options.file
+  Local<Value> file_v =
+    js_options->Get(env->context(), env->file_string()).ToLocalChecked();
   CHECK(file_v->IsString());
   node::Utf8Value file(env->isolate(), file_v);
+  options.file = *file;
 
   // options.args
-  Local<Array> js_argv = Local<Array>::Cast(args[1]);
-  int argc = js_argv->Length();
-  CHECK_GT(argc + 1, 0);  // Check for overflow.
+  Local<Value> argv_v =
+    js_options->Get(env->context(), env->args_string()).ToLocalChecked();
+  if (!argv_v.IsEmpty() && argv_v->IsArray()) {
+    Local<Array> js_argv = Local<Array>::Cast(argv_v);
+    int argc = js_argv->Length();
+    CHECK_GT(argc + 1, 0);  // Check for overflow.
 
-  const char *argv[argc + 1];
-  for (int i = 0; i < argc; i++) {
-    node::Utf8Value arg(env->isolate(),
-        js_argv->Get(env->context(), i).ToLocalChecked());
-    argv[i] = strdup(*arg);
-    CHECK_NOT_NULL(argv[i]);
+    // Heap allocate to detect errors. +1 is for nullptr.
+    options.args = new char*[argc + 1];
+    for (int i = 0; i < argc; i++) {
+      node::Utf8Value arg(env->isolate(),
+          js_argv->Get(env->context(), i).ToLocalChecked());
+      options.args[i] = strdup(*arg);
+      CHECK_NOT_NULL(options.args[i]);
+    }
+    options.args[argc] = nullptr;
   }
-  argv[argc] = nullptr;
-  uv_exec(*file, argv); 
+  uv_exec(&options); 
 
 }
 

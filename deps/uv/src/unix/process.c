@@ -595,7 +595,7 @@ void uv__process_close(uv_process_t* handle) {
     uv_signal_stop(&handle->loop->child_watcher);
 }
 
-void uv_exec(const char* file, const char* argv[]) {
+void uv_exec(const uv_process_options_t* options) {
   int desc;
   for (desc = 0; desc < 3; desc++) {
     int flags = fcntl(desc, F_GETFD, 0);
@@ -605,7 +605,7 @@ void uv_exec(const char* file, const char* argv[]) {
     flags &= ~FD_CLOEXEC; //clear FD_CLOEXEC bit
     fcntl(desc, F_SETFD, flags);
   }
-  execvp(file, argv);
+  execvp(options->file, options->args);
   uv__write_int(1, UV__ERR(errno));
   _exit(127);
 }
