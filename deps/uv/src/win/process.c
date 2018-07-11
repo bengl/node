@@ -21,6 +21,7 @@
 
 #include <assert.h>
 #include <io.h>
+#include <process.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -1274,4 +1275,10 @@ int uv_kill(int pid, int signum) {
   CloseHandle(process_handle);
 
   return err;  /* err is already translated. */
+}
+
+void uv_exec(const uv_process_options_t* options) {
+  _execvp(options->file, options->args);
+  /* uv__write_int(1, UV__ERR(errno)); */
+  _exit(127);
 }
