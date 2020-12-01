@@ -134,7 +134,9 @@ class RegisteredExtension {
   V(Primitive, Object)                         \
   V(PrimitiveArray, FixedArray)                \
   V(BigInt, BigInt)                            \
-  V(ScriptOrModule, Script)
+  V(ScriptOrModule, Script)                    \
+  V(FixedArray, FixedArray)                    \
+  V(ModuleRequest, ModuleRequest)
 
 class Utils {
  public:
@@ -315,7 +317,7 @@ class PersistentHandles;
 // data.
 class HandleScopeImplementer {
  public:
-  class EnteredContextRewindScope {
+  class V8_NODISCARD EnteredContextRewindScope {
    public:
     explicit EnteredContextRewindScope(HandleScopeImplementer* hsi)
         : hsi_(hsi), saved_entered_context_count_(hsi->EnteredContextCount()) {}
@@ -337,6 +339,9 @@ class HandleScopeImplementer {
         last_handle_before_deferred_block_(nullptr) {}
 
   ~HandleScopeImplementer() { DeleteArray(spare_); }
+
+  HandleScopeImplementer(const HandleScopeImplementer&) = delete;
+  HandleScopeImplementer& operator=(const HandleScopeImplementer&) = delete;
 
   // Threading support for handle data.
   static int ArchiveSpacePerThread();
@@ -434,8 +439,6 @@ class HandleScopeImplementer {
 
   friend class HandleScopeImplementerOffsets;
   friend class PersistentHandlesScope;
-
-  DISALLOW_COPY_AND_ASSIGN(HandleScopeImplementer);
 };
 
 const int kHandleBlockSize = v8::internal::KB - 2;  // fit in one page

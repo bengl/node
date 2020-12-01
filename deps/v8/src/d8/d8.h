@@ -16,6 +16,7 @@
 
 #include "src/base/once.h"
 #include "src/base/platform/time.h"
+#include "src/base/platform/wrappers.h"
 #include "src/d8/async-hooks-wrapper.h"
 #include "src/strings/string-hasher.h"
 #include "src/utils/allocation.h"
@@ -119,7 +120,9 @@ class SourceGroup {
 
 class SerializationData {
  public:
-  SerializationData() : size_(0) {}
+  SerializationData() = default;
+  SerializationData(const SerializationData&) = delete;
+  SerializationData& operator=(const SerializationData&) = delete;
 
   uint8_t* data() { return data_.get(); }
   size_t size() { return size_; }
@@ -135,19 +138,17 @@ class SerializationData {
 
  private:
   struct DataDeleter {
-    void operator()(uint8_t* p) const { free(p); }
+    void operator()(uint8_t* p) const { base::Free(p); }
   };
 
   std::unique_ptr<uint8_t, DataDeleter> data_;
-  size_t size_;
+  size_t size_ = 0;
   std::vector<std::shared_ptr<v8::BackingStore>> backing_stores_;
   std::vector<std::shared_ptr<v8::BackingStore>> sab_backing_stores_;
   std::vector<CompiledWasmModule> compiled_wasm_modules_;
 
  private:
   friend class Serializer;
-
-  DISALLOW_COPY_AND_ASSIGN(SerializationData);
 };
 
 class SerializationDataQueue {
@@ -241,7 +242,7 @@ class PerIsolateData {
     return reinterpret_cast<PerIsolateData*>(isolate->GetData(0));
   }
 
-  class RealmScope {
+  class V8_NODISCARD RealmScope {
    public:
     explicit RealmScope(PerIsolateData* data);
     ~RealmScope();
@@ -608,8 +609,15 @@ class Shell : public i::AllStatic {
       v8::MaybeLocal<Value> global_object);
   static void DisposeRealm(const v8::FunctionCallbackInfo<v8::Value>& args,
                            int index);
-  static MaybeLocal<Module> FetchModuleTree(v8::Local<v8::Context> context,
+  static MaybeLocal<Module> FetchModuleTree(v8::Local<v8::Module> origin_module,
+                                            v8::Local<v8::Context> context,
                                             const std::string& file_name);
+
+  template <class T>
+  static MaybeLocal<T> CompileString(Isolate* isolate, Local<Context> context,
+                                     Local<String> source,
+                                     const ScriptOrigin& origin);
+
   static ScriptCompiler::CachedData* LookupCodeCache(Isolate* isolate,
                                                      Local<Value> name);
   static void StoreInCodeCache(Isolate* isolate, Local<Value> name,

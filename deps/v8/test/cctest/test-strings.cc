@@ -222,6 +222,8 @@ static void InitializeBuildingBlocks(Handle<String>* building_blocks,
 class ConsStringStats {
  public:
   ConsStringStats() { Reset(); }
+  ConsStringStats(const ConsStringStats&) = delete;
+  ConsStringStats& operator=(const ConsStringStats&) = delete;
   void Reset();
   void VerifyEqual(const ConsStringStats& that) const;
   int leaves_;
@@ -231,7 +233,6 @@ class ConsStringStats {
   int right_traversals_;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(ConsStringStats);
 };
 
 void ConsStringStats::Reset() {
@@ -254,6 +255,8 @@ class ConsStringGenerationData {
  public:
   static const int kNumberOfBuildingBlocks = 256;
   explicit ConsStringGenerationData(bool long_blocks);
+  ConsStringGenerationData(const ConsStringGenerationData&) = delete;
+  ConsStringGenerationData& operator=(const ConsStringGenerationData&) = delete;
   void Reset();
   inline Handle<String> block(int offset);
   inline Handle<String> block(uint32_t offset);
@@ -270,9 +273,6 @@ class ConsStringGenerationData {
   // Stats.
   ConsStringStats stats_;
   int early_terminations_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ConsStringGenerationData);
 };
 
 ConsStringGenerationData::ConsStringGenerationData(bool long_blocks) {
@@ -332,7 +332,7 @@ void AccumulateStats(ConsString cons_string, ConsStringStats* stats) {
 }
 
 void AccumulateStats(Handle<String> cons_string, ConsStringStats* stats) {
-  DisallowHeapAllocation no_allocation;
+  DisallowGarbageCollection no_gc;
   if (cons_string->IsConsString()) {
     return AccumulateStats(ConsString::cast(*cons_string), stats);
   }
@@ -601,7 +601,7 @@ TEST(ConsStringWithEmptyFirstFlatten) {
   CHECK_EQ(initial_length, cons->length());
 
   // Make sure Flatten doesn't alloc a new string.
-  DisallowHeapAllocation no_alloc;
+  DisallowGarbageCollection no_alloc;
   i::Handle<i::String> flat = i::String::Flatten(isolate, cons);
   CHECK(flat->IsFlat());
   CHECK_EQ(initial_length, flat->length());
@@ -665,7 +665,7 @@ void TestStringCharacterStream(BuildString build, int test_cases) {
     Handle<String> cons_string = build(i, &data);
     ConsStringStats cons_string_stats;
     AccumulateStats(cons_string, &cons_string_stats);
-    DisallowHeapAllocation no_allocation;
+    DisallowGarbageCollection no_gc;
     PrintStats(data);
     // Full verify of cons string.
     cons_string_stats.VerifyEqual(flat_string_stats);
@@ -1613,7 +1613,7 @@ TEST(Latin1IgnoreCase) {
       CheckCanonicalEquivalence(c, test);
       continue;
     }
-    CHECK_EQ(Min(upper, lower), test);
+    CHECK_EQ(std::min(upper, lower), test);
   }
 }
 #endif
@@ -1829,14 +1829,14 @@ void TestString(i::Isolate* isolate, const IndexData& data) {
     size_t index;
     CHECK(s->AsIntegerIndex(&index));
     CHECK_EQ(data.integer_index, index);
-    s->Hash();
-    CHECK_EQ(0, s->hash_field() & String::kIsNotIntegerIndexMask);
+    s->EnsureHash();
+    CHECK_EQ(0, s->raw_hash_field() & String::kIsNotIntegerIndexMask);
     CHECK(s->HasHashCode());
   }
-  if (!s->HasHashCode()) s->Hash();
+  if (!s->HasHashCode()) s->EnsureHash();
   CHECK(s->HasHashCode());
   if (!data.is_integer_index) {
-    CHECK_NE(0, s->hash_field() & String::kIsNotIntegerIndexMask);
+    CHECK_NE(0, s->raw_hash_field() & String::kIsNotIntegerIndexMask);
   }
 }
 
@@ -1850,11 +1850,11 @@ TEST(HashArrayIndexStrings) {
 
   CHECK_EQ(StringHasher::MakeArrayIndexHash(0 /* value */, 1 /* length */) >>
                Name::kHashShift,
-           isolate->factory()->zero_string()->Hash());
+           isolate->factory()->zero_string()->hash());
 
   CHECK_EQ(StringHasher::MakeArrayIndexHash(1 /* value */, 1 /* length */) >>
                Name::kHashShift,
-           isolate->factory()->one_string()->Hash());
+           isolate->factory()->one_string()->hash());
 
   IndexData tests[] = {
     {"", false, 0, false, 0},
@@ -1937,7 +1937,7 @@ TEST(Regress876759) {
   {
     Handle<SeqTwoByteString> raw =
         factory->NewRawTwoByteString(kLength).ToHandleChecked();
-    DisallowHeapAllocation no_gc;
+    DisallowGarbageCollection no_gc;
     CopyChars(raw->GetChars(no_gc), two_byte_buf, kLength);
     parent = raw;
   }

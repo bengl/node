@@ -300,7 +300,7 @@ RUNTIME_FUNCTION(Runtime_StringBuilderConcat) {
   bool one_byte = special->IsOneByteRepresentation();
 
   {
-    DisallowHeapAllocation no_gc;
+    DisallowGarbageCollection no_gc;
     FixedArray fixed_array = FixedArray::cast(array->elements());
     if (fixed_array.length() < array_length) {
       array_length = fixed_array.length();
@@ -327,7 +327,7 @@ RUNTIME_FUNCTION(Runtime_StringBuilderConcat) {
     Handle<SeqOneByteString> answer;
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
         isolate, answer, isolate->factory()->NewRawOneByteString(length));
-    DisallowHeapAllocation no_gc;
+    DisallowGarbageCollection no_gc;
     StringBuilderConcatHelper(*special, answer->GetChars(no_gc),
                               FixedArray::cast(array->elements()),
                               array_length);
@@ -336,7 +336,7 @@ RUNTIME_FUNCTION(Runtime_StringBuilderConcat) {
     Handle<SeqTwoByteString> answer;
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
         isolate, answer, isolate->factory()->NewRawTwoByteString(length));
-    DisallowHeapAllocation no_gc;
+    DisallowGarbageCollection no_gc;
     StringBuilderConcatHelper(*special, answer->GetChars(no_gc),
                               FixedArray::cast(array->elements()),
                               array_length);
@@ -351,7 +351,7 @@ RUNTIME_FUNCTION(Runtime_StringBuilderConcat) {
 // the length of the successfully copied prefix.
 static int CopyCachedOneByteCharsToArray(Heap* heap, const uint8_t* chars,
                                          FixedArray elements, int length) {
-  DisallowHeapAllocation no_gc;
+  DisallowGarbageCollection no_gc;
   FixedArray one_byte_cache = heap->single_character_string_cache();
   Object undefined = ReadOnlyRoots(heap).undefined_value();
   int i;
@@ -383,7 +383,8 @@ RUNTIME_FUNCTION(Runtime_StringToArray) {
   CONVERT_NUMBER_CHECKED(uint32_t, limit, Uint32, args[1]);
 
   s = String::Flatten(isolate, s);
-  const int length = static_cast<int>(Min<uint32_t>(s->length(), limit));
+  const int length =
+      static_cast<int>(std::min(static_cast<uint32_t>(s->length()), limit));
 
   Handle<FixedArray> elements;
   int position = 0;
@@ -391,7 +392,7 @@ RUNTIME_FUNCTION(Runtime_StringToArray) {
     // Try using cached chars where possible.
     elements = isolate->factory()->NewUninitializedFixedArray(length);
 
-    DisallowHeapAllocation no_gc;
+    DisallowGarbageCollection no_gc;
     String::FlatContent content = s->GetFlatContent(no_gc);
     if (content.IsOneByte()) {
       Vector<const uint8_t> chars = content.ToOneByteVector();

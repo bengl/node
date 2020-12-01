@@ -39,7 +39,7 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   using AtomicMarkingState = MarkCompactCollector::AtomicMarkingState;
   using NonAtomicMarkingState = MarkCompactCollector::NonAtomicMarkingState;
 
-  class PauseBlackAllocationScope {
+  class V8_NODISCARD PauseBlackAllocationScope {
    public:
     explicit PauseBlackAllocationScope(IncrementalMarking* marking)
         : marking_(marking), paused_(false) {
@@ -81,7 +81,7 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   static constexpr size_t kGlobalActivationThreshold = 0;
 #endif
 
-#ifdef V8_CONCURRENT_MARKING
+#ifdef V8_ATOMIC_MARKING_STATE
   static const AccessMode kAtomicity = AccessMode::ATOMIC;
 #else
   static const AccessMode kAtomicity = AccessMode::NON_ATOMIC;
@@ -146,7 +146,6 @@ class V8_EXPORT_PRIVATE IncrementalMarking final {
   void FinalizeIncrementally();
 
   void UpdateMarkingWorklistAfterScavenge();
-  void UpdateWeakReferencesAfterScavenge();
   void UpdateMarkedBytesAfterScavenge(size_t dead_bytes_in_new_space);
 
   void Hurry();

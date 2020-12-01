@@ -27,6 +27,7 @@
 #include "src/wasm/wasm-objects-inl.h"
 
 #ifdef V8_ENABLE_WASM_GDB_REMOTE_DEBUGGING
+#include "src/base/platform/wrappers.h"
 #include "src/debug/wasm/gdb-server/gdb-server.h"
 #endif  // V8_ENABLE_WASM_GDB_REMOTE_DEBUGGING
 
@@ -395,32 +396,7 @@ WasmEngine::~WasmEngine() {
   gdb_server_.reset();
 #endif  // V8_ENABLE_WASM_GDB_REMOTE_DEBUGGING
 
-  // Collect the live modules into a vector first, then cancel them while
-  // releasing our lock. This will allow the background tasks to finish.
-  std::vector<std::shared_ptr<NativeModule>> live_modules;
-  {
-    base::MutexGuard guard(&mutex_);
-    for (auto& entry : native_modules_) {
-      if (auto shared_ptr = entry.second->weak_ptr.lock()) {
-        live_modules.emplace_back(std::move(shared_ptr));
-      }
-    }
-  }
-
-  for (auto& native_module : live_modules) {
-    native_module->compilation_state()->CancelCompilation();
-  }
-  live_modules.clear();
-
-  // Now wait for all background compile tasks to actually finish.
-  std::vector<std::shared_ptr<JobHandle>> compile_job_handles;
-  {
-    base::MutexGuard guard(&mutex_);
-    compile_job_handles = compile_job_handles_;
-  }
-  for (auto& job_handle : compile_job_handles) {
-    if (job_handle->IsRunning()) job_handle->Cancel();
-  }
+  operations_barrier_->CancelAndWait();
 
   // All AsyncCompileJobs have been canceled.
   DCHECK(async_compile_jobs_.empty());
@@ -596,7 +572,7 @@ void WasmEngine::AsyncCompile(
     if (is_shared) {
       // Make a copy of the wire bytes to avoid concurrent modification.
       std::unique_ptr<uint8_t[]> copy(new uint8_t[bytes.length()]);
-      memcpy(copy.get(), bytes.start(), bytes.length());
+      base::Memcpy(copy.get(), bytes.start(), bytes.length());
       ModuleWireBytes bytes_copy(copy.get(), copy.get() + bytes.length());
       module_object = SyncCompile(isolate, enabled, &thrower, bytes_copy);
     } else {
@@ -624,7 +600,7 @@ void WasmEngine::AsyncCompile(
   // Make a copy of the wire bytes in case the user program changes them
   // during asynchronous compilation.
   std::unique_ptr<byte[]> copy(new byte[bytes.length()]);
-  memcpy(copy.get(), bytes.start(), bytes.length());
+  base::Memcpy(copy.get(), bytes.start(), bytes.length());
 
   AsyncCompileJob* job =
       CreateAsyncCompileJob(isolate, enabled, std::move(copy), bytes.length(),
@@ -1036,8 +1012,7 @@ void WasmEngine::LogOutstandingCodesForIsolate(Isolate* isolate) {
     DCHECK_EQ(1, isolates_.count(isolate));
     code_to_log.swap(isolates_[isolate]->code_to_log);
   }
-  TRACE_EVENT1("v8.wasm", "wasm.LogCode", "num_code_objects",
-               code_to_log.size());
+  TRACE_EVENT1("v8.wasm", "wasm.LogCode", "codeObjects", code_to_log.size());
   if (code_to_log.empty()) return;
   for (WasmCode* code : code_to_log) {
     code->LogCode(isolate);
@@ -1334,12 +1309,9 @@ Handle<Script> WasmEngine::GetOrCreateScript(
   }
 }
 
-void WasmEngine::ShepherdCompileJobHandle(
-    std::shared_ptr<JobHandle> job_handle) {
-  DCHECK_NOT_NULL(job_handle);
-  base::MutexGuard guard(&mutex_);
-  // TODO(clemensb): Add occasional cleanup of finished handles.
-  compile_job_handles_.emplace_back(std::move(job_handle));
+std::shared_ptr<OperationsBarrier>
+WasmEngine::GetBarrierForBackgroundCompile() {
+  return operations_barrier_;
 }
 
 void WasmEngine::TriggerGC(int8_t gc_sequence_index) {

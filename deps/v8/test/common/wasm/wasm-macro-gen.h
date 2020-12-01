@@ -67,6 +67,23 @@
       static_cast<byte>((((x) >> 21) & MASK_7) | 0x80), \
       static_cast<byte>((((x) >> 28) & MASK_7))
 
+#define U64V_1(x) U32V_1(static_cast<uint32_t>(x))
+#define U64V_2(x) U32V_2(static_cast<uint32_t>(x))
+#define U64V_3(x) U32V_3(static_cast<uint32_t>(x))
+#define U64V_4(x) U32V_4(static_cast<uint32_t>(x))
+#define U64V_5(x)                                                  \
+  static_cast<uint8_t>((uint64_t{x} & MASK_7) | 0x80),             \
+      static_cast<uint8_t>(((uint64_t{x} >> 7) & MASK_7) | 0x80),  \
+      static_cast<uint8_t>(((uint64_t{x} >> 14) & MASK_7) | 0x80), \
+      static_cast<uint8_t>(((uint64_t{x} >> 21) & MASK_7) | 0x80), \
+      static_cast<uint8_t>(((uint64_t{x} >> 28) & MASK_7))
+#define U64V_6(x)                                                  \
+  static_cast<uint8_t>((uint64_t{x} & MASK_7) | 0x80),             \
+      static_cast<uint8_t>(((uint64_t{x} >> 7) & MASK_7) | 0x80),  \
+      static_cast<uint8_t>(((uint64_t{x} >> 14) & MASK_7) | 0x80), \
+      static_cast<uint8_t>(((uint64_t{x} >> 21) & MASK_7) | 0x80), \
+      static_cast<uint8_t>(((uint64_t{x} >> 28) & MASK_7) | 0x80), \
+      static_cast<uint8_t>(((uint64_t{x} >> 35) & MASK_7))
 #define U64V_10(x)                                                 \
   static_cast<uint8_t>((uint64_t{x} & MASK_7) | 0x80),             \
       static_cast<uint8_t>(((uint64_t{x} >> 7) & MASK_7) | 0x80),  \
@@ -206,8 +223,10 @@
 // Misc expressions.
 //------------------------------------------------------------------------------
 #define WASM_STMTS(...) __VA_ARGS__
-#define WASM_ZERO kExprI32Const, 0
-#define WASM_ONE kExprI32Const, 1
+#define WASM_ZERO WASM_I32V_1(0)
+#define WASM_ONE WASM_I32V_1(1)
+#define WASM_ZERO64 WASM_I64V_1(0)
+#define WASM_ONE64 WASM_I64V_1(1)
 
 #define I32V_MIN(length) -(1 << (6 + (7 * ((length)-1))))
 #define I32V_MAX(length) ((1 << (6 + (7 * ((length)-1)))) - 1)

@@ -41,11 +41,13 @@ class LocalHandles {
   friend class LocalHandleScope;
 };
 
-class LocalHandleScope {
+class V8_NODISCARD LocalHandleScope {
  public:
   explicit inline LocalHandleScope(LocalIsolate* local_isolate);
   explicit inline LocalHandleScope(LocalHeap* local_heap);
   inline ~LocalHandleScope();
+  LocalHandleScope(const LocalHandleScope&) = delete;
+  LocalHandleScope& operator=(const LocalHandleScope&) = delete;
 
   template <typename T>
   Handle<T> CloseAndEscape(Handle<T> handle_value);
@@ -64,8 +66,6 @@ class LocalHandleScope {
   LocalHeap* local_heap_;
   Address* prev_limit_;
   Address* prev_next_;
-
-  DISALLOW_COPY_AND_ASSIGN(LocalHandleScope);
 };
 
 }  // namespace internal

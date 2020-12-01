@@ -10,6 +10,7 @@
 
 #include "src/base/compiler-specific.h"
 #include "src/base/logging.h"
+#include "src/base/platform/wrappers.h"
 
 // No-op macro which is used to work around MSVC's funky VA_ARGS support.
 #define EXPAND(x) x
@@ -104,16 +105,20 @@ V8_INLINE Dest bit_cast(Source const& source) {
   static_assert(sizeof(Dest) == sizeof(Source),
                 "source and dest must be same size");
   Dest dest;
-  memcpy(&dest, &source, sizeof(dest));
+  v8::base::Memcpy(&dest, &source, sizeof(dest));
   return dest;
 }
 
 // Explicitly declare the assignment operator as deleted.
+// Note: This macro is deprecated and will be removed soon. Please explicitly
+// delete the assignment operator instead.
 #define DISALLOW_ASSIGN(TypeName) TypeName& operator=(const TypeName&) = delete
 
 // Explicitly declare the copy constructor and assignment operator as deleted.
 // This also deletes the implicit move constructor and implicit move assignment
 // operator, but still allows to manually define them.
+// Note: This macro is deprecated and will be removed soon. Please explicitly
+// delete the copy constructor and assignment operator instead.
 #define DISALLOW_COPY_AND_ASSIGN(TypeName) \
   TypeName(const TypeName&) = delete;      \
   DISALLOW_ASSIGN(TypeName)

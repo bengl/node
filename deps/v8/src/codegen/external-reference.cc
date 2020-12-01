@@ -33,6 +33,7 @@
 #include "src/wasm/wasm-external-refs.h"
 
 #ifdef V8_INTL_SUPPORT
+#include "src/base/platform/wrappers.h"
 #include "src/objects/intl-objects.h"
 #endif  // V8_INTL_SUPPORT
 
@@ -120,6 +121,13 @@ ExternalReference ExternalReference::handle_scope_implementer_address(
     Isolate* isolate) {
   return ExternalReference(isolate->handle_scope_implementer_address());
 }
+
+#ifdef V8_HEAP_SANDBOX
+ExternalReference ExternalReference::external_pointer_table_address(
+    Isolate* isolate) {
+  return ExternalReference(isolate->external_pointer_table_address());
+}
+#endif
 
 ExternalReference ExternalReference::interpreter_dispatch_table_address(
     Isolate* isolate) {
@@ -468,6 +476,11 @@ ExternalReference ExternalReference::address_of_double_neg_constant() {
   return ExternalReference(reinterpret_cast<Address>(&double_negate_constant));
 }
 
+ExternalReference
+ExternalReference::address_of_enable_experimental_regexp_engine() {
+  return ExternalReference(&FLAG_enable_experimental_regexp_engine);
+}
+
 ExternalReference ExternalReference::is_profiling_address(Isolate* isolate) {
   return ExternalReference(isolate->is_profiling_address());
 }
@@ -598,7 +611,7 @@ void* libc_memchr(void* string, int character, size_t search_length) {
 FUNCTION_REFERENCE(libc_memchr_function, libc_memchr)
 
 void* libc_memcpy(void* dest, const void* src, size_t n) {
-  return memcpy(dest, src, n);
+  return base::Memcpy(dest, src, n);
 }
 
 FUNCTION_REFERENCE(libc_memcpy_function, libc_memcpy)
@@ -650,7 +663,7 @@ ExternalReference ExternalReference::search_string_raw_two_two() {
 FUNCTION_REFERENCE(orderedhashmap_gethash_raw, OrderedHashMap::GetHash)
 
 Address GetOrCreateHash(Isolate* isolate, Address raw_key) {
-  DisallowHeapAllocation no_gc;
+  DisallowGarbageCollection no_gc;
   return Object(raw_key).GetOrCreateHash(isolate).ptr();
 }
 
@@ -665,7 +678,7 @@ FUNCTION_REFERENCE(jsreceiver_create_identity_hash,
                    JSReceiverCreateIdentityHash)
 
 static uint32_t ComputeSeededIntegerHash(Isolate* isolate, int32_t key) {
-  DisallowHeapAllocation no_gc;
+  DisallowGarbageCollection no_gc;
   return ComputeSeededHash(static_cast<uint32_t>(key), HashSeed(isolate));
 }
 
@@ -813,6 +826,12 @@ ExternalReference ExternalReference::fast_c_call_caller_pc_address(
       isolate->isolate_data()->fast_c_call_caller_pc_address());
 }
 
+ExternalReference ExternalReference::fast_api_call_target_address(
+    Isolate* isolate) {
+  return ExternalReference(
+      isolate->isolate_data()->fast_api_call_target_address());
+}
+
 ExternalReference ExternalReference::stack_is_iterable_address(
     Isolate* isolate) {
   return ExternalReference(
@@ -940,6 +959,11 @@ FUNCTION_REFERENCE(call_enter_context_function, EnterMicrotaskContextWrapper)
 FUNCTION_REFERENCE(
     js_finalization_registry_remove_cell_from_unregister_token_map,
     JSFinalizationRegistry::RemoveCellFromUnregisterTokenMap)
+
+#ifdef V8_HEAP_SANDBOX
+FUNCTION_REFERENCE(external_pointer_table_grow_table_function,
+                   ExternalPointerTable::GrowTable)
+#endif
 
 bool operator==(ExternalReference lhs, ExternalReference rhs) {
   return lhs.address() == rhs.address();

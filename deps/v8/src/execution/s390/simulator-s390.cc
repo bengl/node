@@ -9,10 +9,13 @@
 
 #include <stdarg.h>
 #include <stdlib.h>
+
 #include <cmath>
 
 #include "src/base/bits.h"
 #include "src/base/once.h"
+#include "src/base/platform/platform.h"
+#include "src/base/platform/wrappers.h"
 #include "src/codegen/assembler.h"
 #include "src/codegen/macro-assembler.h"
 #include "src/codegen/register-configuration.h"
@@ -732,7 +735,7 @@ void Simulator::CheckICache(base::CustomMatcherHashMap* i_cache,
              0);
   } else {
     // Cache miss.  Load memory into the cache.
-    memcpy(cached_line, line, CachePage::kLineLength);
+    base::Memcpy(cached_line, line, CachePage::kLineLength);
     *cache_valid_byte = CachePage::LINE_VALID;
   }
 }
@@ -1561,7 +1564,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   size_t stack_size = MB;  // allocate 1MB for stack
 #endif
   stack_size += 2 * stack_protection_size_;
-  stack_ = reinterpret_cast<char*>(malloc(stack_size));
+  stack_ = reinterpret_cast<char*>(base::Malloc(stack_size));
   pc_modified_ = false;
   icount_ = 0;
   break_pc_ = nullptr;
@@ -1596,7 +1599,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   last_debugger_input_ = nullptr;
 }
 
-Simulator::~Simulator() { free(stack_); }
+Simulator::~Simulator() { base::Free(stack_); }
 
 // Get the active Simulator for the current thread.
 Simulator* Simulator::current(Isolate* isolate) {
@@ -1672,8 +1675,8 @@ double Simulator::get_double_from_register_pair(int reg) {
   // Read the bits from the unsigned integer register_[] array
   // into the double precision floating point value and return it.
   char buffer[sizeof(fp_registers_[0])];
-  memcpy(buffer, &registers_[reg], 2 * sizeof(registers_[0]));
-  memcpy(&dm_val, buffer, 2 * sizeof(registers_[0]));
+  base::Memcpy(buffer, &registers_[reg], 2 * sizeof(registers_[0]));
+  base::Memcpy(&dm_val, buffer, 2 * sizeof(registers_[0]));
 #endif
   return (dm_val);
 }
@@ -1812,7 +1815,7 @@ float Simulator::ReadFloat(intptr_t addr) {
 uintptr_t Simulator::StackLimit(uintptr_t c_limit) const {
   // The simulator uses a separate JS stack. If we have exhausted the C stack,
   // we also drop down the JS limit to reflect the exhaustion on the JS stack.
-  if (GetCurrentStackPosition() < c_limit) {
+  if (base::Stack::GetCurrentStackPosition() < c_limit) {
     return reinterpret_cast<uintptr_t>(get_sp());
   }
 
@@ -2140,8 +2143,8 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
             set_register(r2, x);
             set_register(r3, y);
           } else {
-            memcpy(reinterpret_cast<void*>(result_buffer), &result,
-                   sizeof(ObjectPair));
+            base::Memcpy(reinterpret_cast<void*>(result_buffer), &result,
+                         sizeof(ObjectPair));
             set_register(r2, result_buffer);
           }
         } else {
@@ -2570,8 +2573,8 @@ intptr_t Simulator::CallImpl(Address entry, int argument_count,
   // Store remaining arguments on stack, from low to high memory.
   intptr_t* stack_argument =
       reinterpret_cast<intptr_t*>(entry_stack + kCalleeRegisterSaveAreaSize);
-  memcpy(stack_argument, arguments + reg_arg_count,
-         stack_arg_count * sizeof(*arguments));
+  base::Memcpy(stack_argument, arguments + reg_arg_count,
+               stack_arg_count * sizeof(*arguments));
   set_register(sp, entry_stack);
 
 // Prepare to execute the code at entry
@@ -3031,7 +3034,7 @@ EVALUATE(VLGV) {
   const int size_by_byte = 1 << m4;
   int8_t* src = get_simd_register(r3).int8 + index * size_by_byte;
   set_register(r1, 0);
-  memcpy(&get_register(r1), src, size_by_byte);
+  base::Memcpy(&get_register(r1), src, size_by_byte);
   return length;
 }
 
@@ -3042,7 +3045,7 @@ EVALUATE(VLVG) {
   int64_t index = b2_val + d2;
   const int size_by_byte = 1 << m4;
   int8_t* dst = get_simd_register(r1).int8 + index * size_by_byte;
-  memcpy(dst, &get_register(r3), size_by_byte);
+  base::Memcpy(dst, &get_register(r3), size_by_byte);
   return length;
 }
 
@@ -3062,7 +3065,7 @@ EVALUATE(VREP) {
   int8_t* src = get_simd_register(r3).int8;
   int8_t* dst = get_simd_register(r1).int8;
   for (int i = 0; i < kSimd128Size; i += size_by_byte) {
-    memcpy(dst + i, src + i2 * size_by_byte, size_by_byte);
+    base::Memcpy(dst + i, src + i2 * size_by_byte, size_by_byte);
   }
   return length;
 }
@@ -3076,7 +3079,7 @@ EVALUATE(VLREP) {
   int8_t* src = reinterpret_cast<int8_t*>(addr);
   set_simd_register(r1, fp_zero);
   for (int i = 0; i < kSimd128Size; i += size_by_byte) {
-    memcpy(dst + i, src, size_by_byte);
+    base::Memcpy(dst + i, src, size_by_byte);
   }
   return length;
 }
@@ -3089,7 +3092,7 @@ EVALUATE(VREPI) {
   uint64_t immediate = static_cast<uint64_t>(i2);
   set_simd_register(r1, fp_zero);
   for (int i = 0; i < kSimd128Size; i += size_by_byte) {
-    memcpy(dst + i, &immediate, size_by_byte);
+    base::Memcpy(dst + i, &immediate, size_by_byte);
   }
   return length;
 }
@@ -3133,7 +3136,7 @@ inline static void VectorBinaryOp(void* dst, void* src1, void* src2,
     T& src1_val = *reinterpret_cast<T*>(src1_ptr + i);
     T& src2_val = *reinterpret_cast<T*>(src2_ptr + i);
     dst_val = op(src1_val, src2_val);
-    memcpy(dst_ptr + i, &dst_val, sizeof(T));
+    base::Memcpy(dst_ptr + i, &dst_val, sizeof(T));
   }
 }
 
@@ -3259,8 +3262,8 @@ void VectorSum(void* dst, void* src1, void* src2) {
     value += *(reinterpret_cast<S*>(src1) + i);
     if ((i + 1) % (sizeof(D) / sizeof(S)) == 0) {
       value += *(reinterpret_cast<S*>(src2) + i);
-      memcpy(reinterpret_cast<D*>(dst) + i / (sizeof(D) / sizeof(S)), &value,
-             sizeof(D));
+      base::Memcpy(reinterpret_cast<D*>(dst) + i / (sizeof(D) / sizeof(S)),
+                   &value, sizeof(D));
       value = 0;
     }
   }
@@ -3317,14 +3320,14 @@ void VectorPack(void* dst, void* src1, void* src2, bool saturate,
       src = reinterpret_cast<S*>(src2);
       count = 0;
     }
-    memcpy(&value, src + count, sizeof(S));
+    base::Memcpy(&value, src + count, sizeof(S));
     if (saturate) {
       if (value > max)
         value = max;
       else if (value < min)
         value = min;
     }
-    memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
+    base::Memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
   }
 }
 
@@ -3405,10 +3408,11 @@ EVALUATE(VPKLS) {
 
 template <class S, class D>
 void VectorUnpackHigh(void* dst, void* src) {
+  constexpr size_t kItemCount = kSimd128Size / sizeof(D);
   D value = 0;
-  for (size_t i = 0; i < kSimd128Size / sizeof(D); i++) {
-    value = *(reinterpret_cast<S*>(src) + i);
-    memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
+  for (size_t i = 0; i < kItemCount; i++) {
+    value = *(reinterpret_cast<S*>(src) + i + kItemCount);
+    base::Memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
   }
 }
 
@@ -3462,11 +3466,14 @@ EVALUATE(VUPLH) {
 
 template <class S, class D>
 void VectorUnpackLow(void* dst, void* src) {
-  D value = 0;
-  size_t count = kSimd128Size / sizeof(D);
-  for (size_t i = 0; i < count; i++) {
-    value = *(reinterpret_cast<S*>(src) + i + count);
-    memcpy(reinterpret_cast<D*>(dst) + i, &value, sizeof(D));
+  constexpr size_t kItemCount = kSimd128Size / sizeof(D);
+  D temps[kItemCount] = {0};
+  // About overwriting if src and dst are the same register.
+  for (size_t i = 0; i < kItemCount; i++) {
+    temps[i] = static_cast<D>(*(reinterpret_cast<S*>(src) + i));
+  }
+  for (size_t i = 0; i < kItemCount; i++) {
+    base::Memcpy(reinterpret_cast<D*>(dst) + i, &temps[i], sizeof(D));
   }
 }
 
@@ -3703,7 +3710,7 @@ void VectorLoadComplement(void* dst, void* src) {
     T& src_val = *reinterpret_cast<T*>(src_ptr + i);
     T& dst_val = *reinterpret_cast<T*>(dst_ptr + i);
     dst_val = -(uint64_t)src_val;
-    memcpy(dst_ptr + i, &dst_val, sizeof(T));
+    base::Memcpy(dst_ptr + i, &dst_val, sizeof(T));
   }
 }
 
@@ -3742,15 +3749,14 @@ EVALUATE(VPERM) {
   USE(m6);
   for (int i = 0; i < kSimd128Size; i++) {
     int8_t lane_num = get_simd_register_by_lane<int8_t>(r4, i);
+    // Get the five least significant bits.
+    lane_num = (lane_num << 3) >> 3;
     int reg = r2;
     if (lane_num >= kSimd128Size) {
       lane_num = lane_num - kSimd128Size;
       reg = r3;
     }
-    int8_t result = 0;
-    if (lane_num >= 0 && lane_num < kSimd128Size * 2) {
-      result = get_simd_register_by_lane<int8_t>(reg, lane_num);
-    }
+    int8_t result = get_simd_register_by_lane<int8_t>(reg, lane_num);
     set_simd_register_by_lane<int8_t>(r1, i, result);
   }
   return length;
@@ -3809,7 +3815,7 @@ void VectorShift(void* dst, void* src, unsigned int shift, Operation op) {
     T& dst_val = *reinterpret_cast<T*>(dst_ptr + i);
     T& src_val = *reinterpret_cast<T*>(src_ptr + i);
     dst_val = op(src_val, shift);
-    memcpy(dst_ptr + i, &dst_val, sizeof(T));
+    base::Memcpy(dst_ptr + i, &dst_val, sizeof(T));
   }
 }
 
@@ -4067,7 +4073,7 @@ void VectorFPMaxMin(void* dst, void* src1, void* src2, int mode, Operation op) {
     T src1_val = *(src1_ptr + i);
     T src2_val = *(src2_ptr + i);
     T value = op(src1_val, src2_val, mode);
-    memcpy(dst_ptr + i, &value, sizeof(T));
+    base::Memcpy(dst_ptr + i, &value, sizeof(T));
   }
 }
 
@@ -4141,7 +4147,7 @@ void VectorFPCompare(void* dst, void* src1, void* src2, Operation op) {
     S src1_val = *(src1_ptr + i);
     S src2_val = *(src2_ptr + i);
     D value = op(src1_val, src2_val);
-    memcpy(dst_ptr + i, &value, sizeof(D));
+    base::Memcpy(dst_ptr + i, &value, sizeof(D));
   }
 }
 
@@ -4210,33 +4216,33 @@ void VectorSignOp(void* dst, void* src, int m4, int m5) {
     case 0:
       if (m4 == 8) {
         T value = -(*src_ptr);
-        memcpy(dst_ptr, &value, sizeof(T));
+        base::Memcpy(dst_ptr, &value, sizeof(T));
       } else {
         for (size_t i = 0; i < kSimd128Size / sizeof(T); i++) {
           T value = -(*(src_ptr + i));
-          memcpy(dst_ptr + i, &value, sizeof(T));
+          base::Memcpy(dst_ptr + i, &value, sizeof(T));
         }
       }
       break;
     case 1:
       if (m4 == 8) {
         T value = -abs(*src_ptr);
-        memcpy(dst_ptr, &value, sizeof(T));
+        base::Memcpy(dst_ptr, &value, sizeof(T));
       } else {
         for (size_t i = 0; i < kSimd128Size / sizeof(T); i++) {
           T value = -abs(*(src_ptr + i));
-          memcpy(dst_ptr + i, &value, sizeof(T));
+          base::Memcpy(dst_ptr + i, &value, sizeof(T));
         }
       }
       break;
     case 2:
       if (m4 == 8) {
         T value = abs(*src_ptr);
-        memcpy(dst_ptr, &value, sizeof(T));
+        base::Memcpy(dst_ptr, &value, sizeof(T));
       } else {
         for (size_t i = 0; i < kSimd128Size / sizeof(T); i++) {
           T value = abs(*(src_ptr + i));
-          memcpy(dst_ptr + i, &value, sizeof(T));
+          base::Memcpy(dst_ptr + i, &value, sizeof(T));
         }
       }
       break;
@@ -4273,7 +4279,7 @@ void VectorFPSqrt(void* dst, void* src) {
   T* src_ptr = reinterpret_cast<T*>(src);
   for (size_t i = 0; i < kSimd128Size / sizeof(T); i++) {
     T value = sqrt(*(src_ptr + i));
-    memcpy(dst_ptr + i, &value, sizeof(T));
+    base::Memcpy(dst_ptr + i, &value, sizeof(T));
   }
 }
 
@@ -4305,39 +4311,26 @@ EVALUATE(VFSQ) {
   return length;
 }
 
-#define ROUNDING_SWITCH(type)                                   \
-  switch (m5) {                                                 \
-    case 4:                                                     \
-      set_simd_register_by_lane<type>(r1, i, nearbyint(value)); \
-      break;                                                    \
-    case 5:                                                     \
-      set_simd_register_by_lane<type>(r1, i, trunc(value));     \
-      break;                                                    \
-    case 6:                                                     \
-      set_simd_register_by_lane<type>(r1, i, ceil(value));      \
-      break;                                                    \
-    case 7:                                                     \
-      set_simd_register_by_lane<type>(r1, i, floor(value));     \
-      break;                                                    \
-    default:                                                    \
-      UNREACHABLE();                                            \
-  }
 EVALUATE(VFI) {
   DCHECK_OPCODE(VFI);
   DECODE_VRR_A_INSTRUCTION(r1, r2, m5, m4, m3);
+  DCHECK_EQ(m4, 0);
   USE(m4);
+
   switch (m3) {
     case 2:
       DCHECK(CpuFeatures::IsSupported(VECTOR_ENHANCE_FACILITY_1));
       for (int i = 0; i < 4; i++) {
         float value = get_simd_register_by_lane<float>(r2, i);
-        ROUNDING_SWITCH(float)
+        float n = ComputeRounding<float>(value, m5);
+        set_simd_register_by_lane<float>(r1, i, n);
       }
       break;
     case 3:
       for (int i = 0; i < 2; i++) {
         double value = get_simd_register_by_lane<double>(r2, i);
-        ROUNDING_SWITCH(double)
+        double n = ComputeRounding<double>(value, m5);
+        set_simd_register_by_lane<double>(r1, i, n);
       }
       break;
     default:
@@ -4345,7 +4338,6 @@ EVALUATE(VFI) {
   }
   return length;
 }
-#undef ROUNDING_SWITCH
 
 EVALUATE(DUMY) {
   DCHECK_OPCODE(DUMY);
@@ -4967,9 +4959,11 @@ EVALUATE(CDR) {
 }
 
 EVALUATE(LER) {
-  UNIMPLEMENTED();
-  USE(instr);
-  return 0;
+  DCHECK_OPCODE(LER);
+  DECODE_RR_INSTRUCTION(r1, r2);
+  int64_t r2_val = get_f_register(r2);
+  set_d_register(r1, r2_val);
+  return length;
 }
 
 EVALUATE(STH) {
@@ -7253,31 +7247,6 @@ EVALUATE(DIEBR) {
   return 0;
 }
 
-EVALUATE(FIEBRA) {
-  DCHECK_OPCODE(FIEBRA);
-  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
-  float r2_val = get_float32_from_d_register(r2);
-  CHECK_EQ(m4, 0);
-  switch (m3) {
-    case Assembler::FIDBRA_ROUND_TO_NEAREST_AWAY_FROM_0:
-      set_d_register_from_float32(r1, round(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_0:
-      set_d_register_from_float32(r1, trunc(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_POS_INF:
-      set_d_register_from_float32(r1, std::ceil(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_NEG_INF:
-      set_d_register_from_float32(r1, std::floor(r2_val));
-      break;
-    default:
-      UNIMPLEMENTED();
-      break;
-  }
-  return length;
-}
-
 EVALUATE(THDER) {
   UNIMPLEMENTED();
   USE(instr);
@@ -7294,31 +7263,6 @@ EVALUATE(DIDBR) {
   UNIMPLEMENTED();
   USE(instr);
   return 0;
-}
-
-EVALUATE(FIDBRA) {
-  DCHECK_OPCODE(FIDBRA);
-  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
-  double r2_val = get_double_from_d_register(r2);
-  CHECK_EQ(m4, 0);
-  switch (m3) {
-    case Assembler::FIDBRA_ROUND_TO_NEAREST_AWAY_FROM_0:
-      set_d_register_from_double(r1, round(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_0:
-      set_d_register_from_double(r1, trunc(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_POS_INF:
-      set_d_register_from_double(r1, std::ceil(r2_val));
-      break;
-    case Assembler::FIDBRA_ROUND_TOWARD_NEG_INF:
-      set_d_register_from_double(r1, std::floor(r2_val));
-      break;
-    default:
-      UNIMPLEMENTED();
-      break;
-  }
-  return length;
 }
 
 EVALUATE(LXR) {
@@ -7346,9 +7290,10 @@ EVALUATE(LCDFR) {
 }
 
 EVALUATE(LZER) {
-  UNIMPLEMENTED();
-  USE(instr);
-  return 0;
+  DCHECK_OPCODE(LZER);
+  DECODE_RRE_INSTRUCTION_NO_R2(r1);
+  set_d_register_from_float32(r1, 0.0);
+  return length;
 }
 
 EVALUATE(LZDR) {
@@ -7430,177 +7375,148 @@ EVALUATE(CXFBRA) {
   return 0;
 }
 
-EVALUATE(CFEBRA) {
-  DCHECK_OPCODE(CFEBRA);
-  DECODE_RRE_INSTRUCTION_M3(r1, r2, mask_val);
-  float r2_fval = get_float32_from_d_register(r2);
-  int32_t r1_val = 0;
-
-  SetS390RoundConditionCode(r2_fval, INT32_MAX, INT32_MIN);
-
-  switch (mask_val) {
-    case CURRENT_ROUNDING_MODE:
-    case ROUND_TO_PREPARE_FOR_SHORTER_PRECISION: {
-      r1_val = static_cast<int32_t>(r2_fval);
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_AWAY_FROM_0: {
-      float ceil_val = std::ceil(r2_fval);
-      float floor_val = std::floor(r2_fval);
-      float sub_val1 = std::fabs(r2_fval - floor_val);
-      float sub_val2 = std::fabs(r2_fval - ceil_val);
-      if (sub_val1 > sub_val2) {
-        r1_val = static_cast<int32_t>(ceil_val);
-      } else if (sub_val1 < sub_val2) {
-        r1_val = static_cast<int32_t>(floor_val);
-      } else {  // round away from zero:
-        if (r2_fval > 0.0) {
-          r1_val = static_cast<int32_t>(ceil_val);
-        } else {
-          r1_val = static_cast<int32_t>(floor_val);
-        }
-      }
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_TO_EVEN: {
-      float ceil_val = std::ceil(r2_fval);
-      float floor_val = std::floor(r2_fval);
-      float sub_val1 = std::fabs(r2_fval - floor_val);
-      float sub_val2 = std::fabs(r2_fval - ceil_val);
-      if (sub_val1 > sub_val2) {
-        r1_val = static_cast<int32_t>(ceil_val);
-      } else if (sub_val1 < sub_val2) {
-        r1_val = static_cast<int32_t>(floor_val);
-      } else {  // check which one is even:
-        int32_t c_v = static_cast<int32_t>(ceil_val);
-        int32_t f_v = static_cast<int32_t>(floor_val);
-        if (f_v % 2 == 0)
-          r1_val = f_v;
-        else
-          r1_val = c_v;
-      }
-      break;
-    }
-    case ROUND_TOWARD_0: {
-      // check for overflow, cast r2_fval to double
-      // then check value within the range of INT_MIN and INT_MAX
-      // and set condition code accordingly
-      double temp = static_cast<double>(r2_fval);
-      if (temp < INT_MIN) {
-        r1_val = kMinInt;
-        condition_reg_ = CC_OF;
-      } else if (temp > INT_MAX) {
-        r1_val = kMaxInt;
-        condition_reg_ = CC_OF;
-      } else {
-        r1_val = static_cast<int32_t>(r2_fval);
-      }
-      break;
-    }
-    case ROUND_TOWARD_PLUS_INFINITE: {
-      r1_val = static_cast<int32_t>(std::ceil(r2_fval));
-      break;
-    }
-    case ROUND_TOWARD_MINUS_INFINITE: {
-      // check for overflow, cast r2_fval to 64bit integer
-      // then check value within the range of INT_MIN and INT_MAX
-      // and set condition code accordingly
-      int64_t temp = static_cast<int64_t>(std::floor(r2_fval));
-      if (temp < INT_MIN || temp > INT_MAX) {
-        condition_reg_ = CC_OF;
-      }
-      r1_val = static_cast<int32_t>(std::floor(r2_fval));
-      break;
-    }
-    default:
-      UNREACHABLE();
-  }
-  set_low_register(r1, r1_val);
+EVALUATE(FIDBRA) {
+  DCHECK_OPCODE(FIDBRA);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  double a = get_double_from_d_register(r2);
+  double n = ComputeRounding<double>(a, m3);
+  set_d_register_from_double(r1, n);
   return length;
+}
+
+EVALUATE(FIEBRA) {
+  DCHECK_OPCODE(FIEBRA);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  float a = get_float32_from_d_register(r2);
+  float n = ComputeRounding<float>(a, m3);
+  set_d_register_from_float32(r1, n);
+  return length;
+}
+
+template <class T, class R>
+static int ComputeSignedRoundingConditionCode(T a, T n) {
+  constexpr T NINF = -std::numeric_limits<T>::infinity();
+  constexpr T PINF = std::numeric_limits<T>::infinity();
+  constexpr long double MN =
+      static_cast<long double>(std::numeric_limits<R>::min());
+  constexpr long double MP =
+      static_cast<long double>(std::numeric_limits<R>::max());
+
+  if (NINF <= a && a < MN && n < MN) {
+    return 0x1;
+  } else if (NINF < a && a < MN && n == MN) {
+    return 0x4;
+  } else if (MN <= a && a < 0.0) {
+    return 0x4;
+  } else if (a == 0.0) {
+    return 0x8;
+  } else if (0.0 < a && a <= MP) {
+    return 0x2;
+  } else if (MP < a && a <= PINF && n == MP) {
+    return 0x2;
+  } else if (MP < a && a <= PINF && n > MP) {
+    return 0x1;
+  } else if (std::isnan(a)) {
+    return 0x1;
+  }
+  UNIMPLEMENTED();
+  return 0;
+}
+
+template <class T, class R>
+static R ComputeSignedRoundingResult(T a, T n) {
+  constexpr T NINF = -std::numeric_limits<T>::infinity();
+  constexpr T PINF = std::numeric_limits<T>::infinity();
+  constexpr long double MN =
+      static_cast<long double>(std::numeric_limits<R>::min());
+  constexpr long double MP =
+      static_cast<long double>(std::numeric_limits<R>::max());
+
+  if (NINF <= a && a < MN && n < MN) {
+    return std::numeric_limits<R>::min();
+  } else if (NINF < a && a < MN && n == MN) {
+    return std::numeric_limits<R>::min();
+  } else if (MN <= a && a < 0.0) {
+    return static_cast<R>(n);
+  } else if (a == 0.0) {
+    return 0;
+  } else if (0.0 < a && a <= MP) {
+    return static_cast<R>(n);
+  } else if (MP < a && a <= PINF && n == MP) {
+    return std::numeric_limits<R>::max();
+  } else if (MP < a && a <= PINF && n > MP) {
+    return std::numeric_limits<R>::max();
+  } else if (std::isnan(a)) {
+    return std::numeric_limits<R>::min();
+  }
+  UNIMPLEMENTED();
+  return 0;
 }
 
 EVALUATE(CFDBRA) {
   DCHECK_OPCODE(CFDBRA);
-  DECODE_RRE_INSTRUCTION_M3(r1, r2, mask_val);
-  double r2_val = get_double_from_d_register(r2);
-  int32_t r1_val = 0;
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  double a = get_double_from_d_register(r2);
+  double n = ComputeRounding<double>(a, m3);
+  int32_t r1_val = ComputeSignedRoundingResult<double, int32_t>(a, n);
+  condition_reg_ = ComputeSignedRoundingConditionCode<double, int32_t>(a, n);
 
-  SetS390RoundConditionCode(r2_val, INT32_MAX, INT32_MIN);
-
-  switch (mask_val) {
-    case CURRENT_ROUNDING_MODE:
-    case ROUND_TO_PREPARE_FOR_SHORTER_PRECISION: {
-      r1_val = static_cast<int32_t>(r2_val);
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_AWAY_FROM_0: {
-      double ceil_val = std::ceil(r2_val);
-      double floor_val = std::floor(r2_val);
-      double sub_val1 = std::fabs(r2_val - floor_val);
-      double sub_val2 = std::fabs(r2_val - ceil_val);
-      if (sub_val1 > sub_val2) {
-        r1_val = static_cast<int32_t>(ceil_val);
-      } else if (sub_val1 < sub_val2) {
-        r1_val = static_cast<int32_t>(floor_val);
-      } else {  // round away from zero:
-        if (r2_val > 0.0) {
-          r1_val = static_cast<int32_t>(ceil_val);
-        } else {
-          r1_val = static_cast<int32_t>(floor_val);
-        }
-      }
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_TO_EVEN: {
-      double ceil_val = std::ceil(r2_val);
-      double floor_val = std::floor(r2_val);
-      double sub_val1 = std::fabs(r2_val - floor_val);
-      double sub_val2 = std::fabs(r2_val - ceil_val);
-      if (sub_val1 > sub_val2) {
-        r1_val = static_cast<int32_t>(ceil_val);
-      } else if (sub_val1 < sub_val2) {
-        r1_val = static_cast<int32_t>(floor_val);
-      } else {  // check which one is even:
-        int32_t c_v = static_cast<int32_t>(ceil_val);
-        int32_t f_v = static_cast<int32_t>(floor_val);
-        if (f_v % 2 == 0)
-          r1_val = f_v;
-        else
-          r1_val = c_v;
-      }
-      break;
-    }
-    case ROUND_TOWARD_0: {
-      // check for overflow, cast r2_val to 64bit integer
-      // then check value within the range of INT_MIN and INT_MAX
-      // and set condition code accordingly
-      int64_t temp = static_cast<int64_t>(r2_val);
-      if (temp < INT_MIN || temp > INT_MAX) {
-        condition_reg_ = CC_OF;
-      }
-      r1_val = static_cast<int32_t>(r2_val);
-      break;
-    }
-    case ROUND_TOWARD_PLUS_INFINITE: {
-      r1_val = static_cast<int32_t>(std::ceil(r2_val));
-      break;
-    }
-    case ROUND_TOWARD_MINUS_INFINITE: {
-      // check for overflow, cast r2_val to 64bit integer
-      // then check value within the range of INT_MIN and INT_MAX
-      // and set condition code accordingly
-      int64_t temp = static_cast<int64_t>(std::floor(r2_val));
-      if (temp < INT_MIN || temp > INT_MAX) {
-        condition_reg_ = CC_OF;
-      }
-      r1_val = static_cast<int32_t>(std::floor(r2_val));
-      break;
-    }
-    default:
-      UNREACHABLE();
-  }
   set_low_register(r1, r1_val);
   return length;
+}
+
+EVALUATE(CFEBRA) {
+  DCHECK_OPCODE(CFEBRA);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  float a = get_float32_from_d_register(r2);
+  float n = ComputeRounding<float>(a, m3);
+  int32_t r1_val = ComputeSignedRoundingResult<float, int32_t>(a, n);
+  condition_reg_ = ComputeSignedRoundingConditionCode<float, int32_t>(a, n);
+
+  set_low_register(r1, r1_val);
+  return length;
+}
+
+EVALUATE(CGEBRA) {
+  DCHECK_OPCODE(CGEBRA);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  float a = get_float32_from_d_register(r2);
+  float n = ComputeRounding<float>(a, m3);
+  int64_t r1_val = ComputeSignedRoundingResult<float, int64_t>(a, n);
+  condition_reg_ = ComputeSignedRoundingConditionCode<float, int64_t>(a, n);
+
+  set_register(r1, r1_val);
+  return length;
+}
+
+EVALUATE(CGDBRA) {
+  DCHECK_OPCODE(CGDBRA);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  double a = get_double_from_d_register(r2);
+  double n = ComputeRounding<double>(a, m3);
+  int64_t r1_val = ComputeSignedRoundingResult<double, int64_t>(a, n);
+  condition_reg_ = ComputeSignedRoundingConditionCode<double, int64_t>(a, n);
+
+  set_register(r1, r1_val);
+  return length;
+}
+
+EVALUATE(CGXBRA) {
+  UNIMPLEMENTED();
+  USE(instr);
+  return 0;
 }
 
 EVALUATE(CFXBRA) {
@@ -7609,37 +7525,101 @@ EVALUATE(CFXBRA) {
   return 0;
 }
 
+template <class T, class R>
+static int ComputeLogicalRoundingConditionCode(T a, T n) {
+  constexpr T NINF = -std::numeric_limits<T>::infinity();
+  constexpr T PINF = std::numeric_limits<T>::infinity();
+  constexpr long double MP =
+      static_cast<long double>(std::numeric_limits<R>::max());
+
+  if (NINF <= a && a < 0.0) {
+    return (n < 0.0) ? 0x1 : 0x4;
+  } else if (a == 0.0) {
+    return 0x8;
+  } else if (0.0 < a && a <= MP) {
+    return 0x2;
+  } else if (MP < a && a <= PINF) {
+    return n == MP ? 0x2 : 0x1;
+  } else if (std::isnan(a)) {
+    return 0x1;
+  }
+  UNIMPLEMENTED();
+  return 0;
+}
+
+template <class T, class R>
+static R ComputeLogicalRoundingResult(T a, T n) {
+  constexpr T NINF = -std::numeric_limits<T>::infinity();
+  constexpr T PINF = std::numeric_limits<T>::infinity();
+  constexpr long double MP =
+      static_cast<long double>(std::numeric_limits<R>::max());
+
+  if (NINF <= a && a <= 0.0) {
+    return 0;
+  } else if (0.0 < a && a <= MP) {
+    return static_cast<R>(n);
+  } else if (MP < a && a <= PINF) {
+    return std::numeric_limits<R>::max();
+  } else if (std::isnan(a)) {
+    return 0;
+  }
+  UNIMPLEMENTED();
+  return 0;
+}
+
 EVALUATE(CLFEBR) {
   DCHECK_OPCODE(CLFEBR);
-  DECODE_RRE_INSTRUCTION(r1, r2);
-  float r2_val = get_float32_from_d_register(r2);
-  uint32_t r1_val = static_cast<uint32_t>(r2_val);
-  SetS390ConvertConditionCode<double>(r2_val, r1_val, UINT32_MAX);
-  double temp = static_cast<double>(r2_val);
-  if (temp < 0) r1_val = 0;
-  if (temp > kMaxUInt32) r1_val = kMaxUInt32;
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  float a = get_float32_from_d_register(r2);
+  float n = ComputeRounding<float>(a, m3);
+  uint32_t r1_val = ComputeLogicalRoundingResult<float, uint32_t>(a, n);
+  condition_reg_ = ComputeLogicalRoundingConditionCode<float, uint32_t>(a, n);
+
   set_low_register(r1, r1_val);
   return length;
 }
 
 EVALUATE(CLFDBR) {
   DCHECK_OPCODE(CLFDBR);
-  DECODE_RRE_INSTRUCTION(r1, r2);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
   double a = get_double_from_d_register(r2);
-  double n = std::round(a);
-  uint32_t r1_val = static_cast<uint32_t>(n);
+  double n = ComputeRounding<double>(a, m3);
+  uint32_t r1_val = ComputeLogicalRoundingResult<double, uint32_t>(a, n);
+  condition_reg_ = ComputeLogicalRoundingConditionCode<double, uint32_t>(a, n);
+
   set_low_register(r1, r1_val);
-  if (std::isfinite(a) && a < 0.0) {
-    DCHECK(n <= 0.0 && std::isfinite(n));
-    condition_reg_ = (n < 0.0) ? 0x1 : 0x4;
-  } else if (a == 0.0) {
-    condition_reg_ = 0x8;
-  } else if (std::isfinite(a) && a > 0.0) {
-    DCHECK(n >= 0.0 && std::isfinite(n));
-    condition_reg_ = (n <= static_cast<double>(UINT32_MAX)) ? 0x2 : 0x1;
-  } else {
-    condition_reg_ = 0x1;
-  }
+  return length;
+}
+
+EVALUATE(CLGDBR) {
+  DCHECK_OPCODE(CLGDBR);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  double a = get_double_from_d_register(r2);
+  double n = ComputeRounding<double>(a, m3);
+  uint64_t r1_val = ComputeLogicalRoundingResult<double, uint64_t>(a, n);
+  condition_reg_ = ComputeLogicalRoundingConditionCode<double, uint64_t>(a, n);
+
+  set_register(r1, r1_val);
+  return length;
+}
+
+EVALUATE(CLGEBR) {
+  DCHECK_OPCODE(CLGEBR);
+  DECODE_RRF_E_INSTRUCTION(r1, r2, m3, m4);
+  DCHECK_EQ(m4, 0);
+  USE(m4);
+  float a = get_float32_from_d_register(r2);
+  float n = ComputeRounding<float>(a, m3);
+  uint64_t r1_val = ComputeLogicalRoundingResult<float, uint64_t>(a, n);
+  condition_reg_ = ComputeLogicalRoundingConditionCode<float, uint64_t>(a, n);
+
+  set_register(r1, r1_val);
   return length;
 }
 
@@ -7695,134 +7675,6 @@ EVALUATE(CXGBRA) {
   UNIMPLEMENTED();
   USE(instr);
   return 0;
-}
-
-EVALUATE(CGEBRA) {
-  DCHECK_OPCODE(CGEBRA);
-  DECODE_RRE_INSTRUCTION_M3(r1, r2, mask_val);
-  float r2_fval = get_float32_from_d_register(r2);
-  int64_t r1_val = 0;
-
-  SetS390RoundConditionCode(r2_fval, INT64_MAX, INT64_MIN);
-
-  switch (mask_val) {
-    case CURRENT_ROUNDING_MODE:
-    case ROUND_TO_NEAREST_WITH_TIES_AWAY_FROM_0:
-    case ROUND_TO_PREPARE_FOR_SHORTER_PRECISION: {
-      UNIMPLEMENTED();
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_TO_EVEN: {
-      float ceil_val = std::ceil(r2_fval);
-      float floor_val = std::floor(r2_fval);
-      if (std::abs(r2_fval - floor_val) > std::abs(r2_fval - ceil_val)) {
-        r1_val = static_cast<int64_t>(ceil_val);
-      } else if (std::abs(r2_fval - floor_val) < std::abs(r2_fval - ceil_val)) {
-        r1_val = static_cast<int64_t>(floor_val);
-      } else {  // check which one is even:
-        int64_t c_v = static_cast<int64_t>(ceil_val);
-        int64_t f_v = static_cast<int64_t>(floor_val);
-        if (f_v % 2 == 0)
-          r1_val = f_v;
-        else
-          r1_val = c_v;
-      }
-      break;
-    }
-    case ROUND_TOWARD_0: {
-      r1_val = static_cast<int64_t>(r2_fval);
-      break;
-    }
-    case ROUND_TOWARD_PLUS_INFINITE: {
-      r1_val = static_cast<int64_t>(std::ceil(r2_fval));
-      break;
-    }
-    case ROUND_TOWARD_MINUS_INFINITE: {
-      r1_val = static_cast<int64_t>(std::floor(r2_fval));
-      break;
-    }
-    default:
-      UNREACHABLE();
-  }
-  set_register(r1, r1_val);
-  return length;
-}
-
-EVALUATE(CGDBRA) {
-  DCHECK_OPCODE(CGDBRA);
-  DECODE_RRE_INSTRUCTION_M3(r1, r2, mask_val);
-  double r2_val = get_double_from_d_register(r2);
-  int64_t r1_val = 0;
-
-  SetS390RoundConditionCode(r2_val, INT64_MAX, INT64_MIN);
-
-  switch (mask_val) {
-    case CURRENT_ROUNDING_MODE:
-    case ROUND_TO_NEAREST_WITH_TIES_AWAY_FROM_0:
-    case ROUND_TO_PREPARE_FOR_SHORTER_PRECISION: {
-      UNIMPLEMENTED();
-      break;
-    }
-    case ROUND_TO_NEAREST_WITH_TIES_TO_EVEN: {
-      double ceil_val = std::ceil(r2_val);
-      double floor_val = std::floor(r2_val);
-      if (std::abs(r2_val - floor_val) > std::abs(r2_val - ceil_val)) {
-        r1_val = static_cast<int64_t>(ceil_val);
-      } else if (std::abs(r2_val - floor_val) < std::abs(r2_val - ceil_val)) {
-        r1_val = static_cast<int64_t>(floor_val);
-      } else {  // check which one is even:
-        int64_t c_v = static_cast<int64_t>(ceil_val);
-        int64_t f_v = static_cast<int64_t>(floor_val);
-        if (f_v % 2 == 0)
-          r1_val = f_v;
-        else
-          r1_val = c_v;
-      }
-      break;
-    }
-    case ROUND_TOWARD_0: {
-      r1_val = static_cast<int64_t>(r2_val);
-      break;
-    }
-    case ROUND_TOWARD_PLUS_INFINITE: {
-      r1_val = static_cast<int64_t>(std::ceil(r2_val));
-      break;
-    }
-    case ROUND_TOWARD_MINUS_INFINITE: {
-      r1_val = static_cast<int64_t>(std::floor(r2_val));
-      break;
-    }
-    default:
-      UNREACHABLE();
-  }
-  set_register(r1, r1_val);
-  return length;
-}
-
-EVALUATE(CGXBRA) {
-  UNIMPLEMENTED();
-  USE(instr);
-  return 0;
-}
-
-EVALUATE(CLGEBR) {
-  DCHECK_OPCODE(CLGEBR);
-  DECODE_RRE_INSTRUCTION(r1, r2);
-  float r2_val = get_float32_from_d_register(r2);
-  uint64_t r1_val = static_cast<uint64_t>(r2_val);
-  set_register(r1, r1_val);
-  SetS390ConvertConditionCode<double>(r2_val, r1_val, UINT64_MAX);
-  return length;
-}
-
-EVALUATE(CLGDBR) {
-  DCHECK_OPCODE(CLGDBR);
-  DECODE_RRE_INSTRUCTION(r1, r2);
-  double r2_val = get_double_from_d_register(r2);
-  uint64_t r1_val = static_cast<uint64_t>(r2_val);
-  set_register(r1, r1_val);
-  SetS390ConvertConditionCode<double>(r2_val, r1_val, UINT64_MAX);
-  return length;
 }
 
 EVALUATE(CFER) {
