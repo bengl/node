@@ -6329,6 +6329,38 @@ void Context::SetContinuationPreservedEmbedderData(Local<Value> data) {
       *i::Handle<i::HeapObject>::cast(Utils::OpenHandle(*data)));
 }
 
+void v8::Context::SetPromiseHooks(Local<Value> init_hook,
+                                  Local<Value> before_hook,
+                                  Local<Value> after_hook,
+                                  Local<Value> resolve_hook) {
+  i::Handle<i::Context> context = Utils::OpenHandle(this);
+  i::Isolate* isolate = context->GetIsolate();
+  isolate->UpdatePromiseHookProtector();
+
+  i::Handle<i::Object> init = Utils::OpenHandle(*init_hook);
+  i::Handle<i::Object> before = Utils::OpenHandle(*before_hook);
+  i::Handle<i::Object> after = Utils::OpenHandle(*after_hook);
+  i::Handle<i::Object> resolve = Utils::OpenHandle(*resolve_hook);
+
+  Utils::ApiCheck(init->IsJSFunction() || init->IsUndefined(),
+                  "v8::Context::SetPromiseHooks",
+                  "Init Promise hook must be a Function or undefined");
+  Utils::ApiCheck(before->IsJSFunction() || before->IsUndefined(),
+                  "v8::Context::SetPromiseHooks",
+                  "Before Promise hook must be a Function or undefined");
+  Utils::ApiCheck(after->IsJSFunction() || after->IsUndefined(),
+                  "v8::Context::SetPromiseHooks",
+                  "After Promise hook must be a Function or undefined");
+  Utils::ApiCheck(resolve->IsJSFunction() || resolve->IsUndefined(),
+                  "v8::Context::SetPromiseHooks",
+                  "Resolve Promise hook must be a Function or undefined");
+
+  context->native_context().set_promise_hook_init_function(*init);
+  context->native_context().set_promise_hook_before_function(*before);
+  context->native_context().set_promise_hook_after_function(*after);
+  context->native_context().set_promise_hook_resolve_function(*resolve);
+}
+
 MaybeLocal<Context> metrics::Recorder::GetContext(
     Isolate* isolate, metrics::Recorder::ContextId id) {
   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);

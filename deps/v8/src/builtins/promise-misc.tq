@@ -90,6 +90,25 @@ macro NewPromiseRejectReactionJobTask(implicit context: Context)(
   };
 }
 
+transitioning macro RunContextPromiseHook<T: type>(implicit context: Context)(
+    slot: Slot<NativeContext, T>, promise: JSPromise, parent: Object) {
+  const maybeHook = *NativeContextSlot(slot);
+  if (IsUndefined(maybeHook)) return;
+
+  const hook = Cast<JSFunction>(maybeHook) otherwise unreachable;
+  const parentObject = Is<JSPromise>(parent) ? Cast<JSPromise>(parent)
+      otherwise unreachable: Undefined;
+
+  try {
+    if (slot == ContextSlot::PROMISE_HOOK_INIT_FUNCTION_INDEX) {
+      Call(context, hook, Undefined, promise, parentObject);
+    } else {
+      Call(context, hook, Undefined, promise);
+    }
+  } catch (_err) {
+  }
+}
+
 // These allocate and initialize a promise with pending state and
 // undefined fields.
 //
@@ -100,6 +119,8 @@ transitioning macro NewJSPromise(implicit context: Context)(parent: Object):
     JSPromise {
   const instance = InnerNewJSPromise();
   PromiseInit(instance);
+  RunContextPromiseHook(
+      ContextSlot::PROMISE_HOOK_INIT_FUNCTION_INDEX, instance, parent);
   if (IsPromiseHookEnabledOrHasAsyncEventDelegate()) {
     runtime::PromiseHookInit(instance, parent);
   }
@@ -124,7 +145,8 @@ transitioning macro NewJSPromise(implicit context: Context)(
   instance.reactions_or_result = result;
   instance.SetStatus(status);
   promise_internal::ZeroOutEmbedderOffsets(instance);
-
+  RunContextPromiseHook(
+      ContextSlot::PROMISE_HOOK_INIT_FUNCTION_INDEX, instance, Undefined);
   if (IsPromiseHookEnabledOrHasAsyncEventDelegate()) {
     runtime::PromiseHookInit(instance, Undefined);
   }

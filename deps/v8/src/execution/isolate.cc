@@ -4114,15 +4114,20 @@ void Isolate::FireCallCompletedCallback(MicrotaskQueue* microtask_queue) {
   }
 }
 
+void Isolate::UpdatePromiseHookProtector() {
+  if (Protectors::IsPromiseHookIntact(this)) {
+    HandleScope scope(this);
+    Protectors::InvalidatePromiseHook(this);
+  }
+}
+
 void Isolate::PromiseHookStateUpdated() {
   bool promise_hook_or_async_event_delegate =
       promise_hook_ || async_event_delegate_;
   bool promise_hook_or_debug_is_active_or_async_event_delegate =
       promise_hook_or_async_event_delegate || debug()->is_active();
-  if (promise_hook_or_debug_is_active_or_async_event_delegate &&
-      Protectors::IsPromiseHookIntact(this)) {
-    HandleScope scope(this);
-    Protectors::InvalidatePromiseHook(this);
+  if (promise_hook_or_debug_is_active_or_async_event_delegate) {
+    UpdatePromiseHookProtector();
   }
   promise_hook_or_async_event_delegate_ = promise_hook_or_async_event_delegate;
   promise_hook_or_debug_is_active_or_async_event_delegate_ =
@@ -4310,6 +4315,13 @@ void Isolate::RunAtomicsWaitCallback(v8::Isolate::AtomicsWaitEvent event,
 void Isolate::SetPromiseHook(PromiseHook hook) {
   promise_hook_ = hook;
   PromiseHookStateUpdated();
+}
+
+void Isolate::RunAllPromiseHooks(PromiseHookType type,
+                                 Handle<JSPromise> promise,
+                                 Handle<Object> parent) {
+  native_context()->RunPromiseHook(type, promise, parent);
+  RunPromiseHook(type, promise, parent);
 }
 
 void Isolate::RunPromiseHook(PromiseHookType type, Handle<JSPromise> promise,

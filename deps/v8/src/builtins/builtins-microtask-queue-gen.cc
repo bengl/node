@@ -48,6 +48,8 @@ class MicrotaskQueueBuiltinsAssembler : public CodeStubAssembler {
 
   void RunPromiseHook(Runtime::FunctionId id, TNode<Context> context,
                       TNode<HeapObject> promise_or_capability);
+  void RunContextPromiseHook(int id, TNode<Context> context,
+                             TNode<HeapObject> promise_or_capability);
 };
 
 TNode<RawPtrT> MicrotaskQueueBuiltinsAssembler::GetMicrotaskQueue(
@@ -199,6 +201,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     const TNode<Object> thenable = LoadObjectField(
         microtask, PromiseResolveThenableJobTask::kThenableOffset);
 
+    RunContextPromiseHook(Context::PROMISE_HOOK_BEFORE_FUNCTION_INDEX,
+                          microtask_context, CAST(promise_to_resolve));
     RunPromiseHook(Runtime::kPromiseHookBefore, microtask_context,
                    CAST(promise_to_resolve));
 
@@ -208,6 +212,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
                   promise_to_resolve, thenable, then);
     }
 
+    RunContextPromiseHook(Context::PROMISE_HOOK_AFTER_FUNCTION_INDEX,
+                          microtask_context, CAST(promise_to_resolve));
     RunPromiseHook(Runtime::kPromiseHookAfter, microtask_context,
                    CAST(promise_to_resolve));
 
@@ -243,6 +249,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     BIND(&preserved_data_done);
 
     // Run the promise before/debug hook if enabled.
+    RunContextPromiseHook(Context::PROMISE_HOOK_BEFORE_FUNCTION_INDEX,
+                          microtask_context, promise_or_capability);
     RunPromiseHook(Runtime::kPromiseHookBefore, microtask_context,
                    promise_or_capability);
 
@@ -253,6 +261,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     }
 
     // Run the promise after/debug hook if enabled.
+    RunContextPromiseHook(Context::PROMISE_HOOK_AFTER_FUNCTION_INDEX,
+                          microtask_context, promise_or_capability);
     RunPromiseHook(Runtime::kPromiseHookAfter, microtask_context,
                    promise_or_capability);
 
@@ -296,6 +306,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     BIND(&preserved_data_done);
 
     // Run the promise before/debug hook if enabled.
+    RunContextPromiseHook(Context::PROMISE_HOOK_BEFORE_FUNCTION_INDEX,
+                          microtask_context, promise_or_capability);
     RunPromiseHook(Runtime::kPromiseHookBefore, microtask_context,
                    promise_or_capability);
 
@@ -306,6 +318,8 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
     }
 
     // Run the promise after/debug hook if enabled.
+    RunContextPromiseHook(Context::PROMISE_HOOK_AFTER_FUNCTION_INDEX,
+                          microtask_context, promise_or_capability);
     RunPromiseHook(Runtime::kPromiseHookAfter, microtask_context,
                    promise_or_capability);
 
@@ -484,6 +498,37 @@ void MicrotaskQueueBuiltinsAssembler::RunPromiseHook(
         [=] { return promise_or_capability; });
     GotoIf(IsUndefined(promise), &done_hook);
     CallRuntime(id, context, promise);
+    Goto(&done_hook);
+  }
+  BIND(&done_hook);
+}
+
+void MicrotaskQueueBuiltinsAssembler::RunContextPromiseHook(
+    int id, TNode<Context> context, TNode<HeapObject> promise_or_capability) {
+  DCHECK(id >= Context::PROMISE_HOOK_INIT_FUNCTION_INDEX &&
+         id <= Context::PROMISE_HOOK_RESOLVE_FUNCTION_INDEX);
+  TNode<NativeContext> native_context = LoadNativeContext(context);
+  const TNode<Object> promise_hook_obj = LoadContextElement(native_context, id);
+
+  Label hook(this, Label::kDeferred), done_hook(this);
+
+  Branch(IsUndefined(promise_hook_obj), &done_hook, &hook);
+  BIND(&hook);
+  {
+    const TNode<JSFunction> promise_hook = CAST(promise_hook_obj);
+    // Get to the underlying JSPromise instance.
+    TNode<HeapObject> promise = Select<HeapObject>(
+        IsPromiseCapability(promise_or_capability),
+        [=] {
+          return CAST(LoadObjectField(promise_or_capability,
+                                      PromiseCapability::kPromiseOffset));
+        },
+        [=] { return promise_or_capability; });
+    GotoIf(IsUndefined(promise), &done_hook);
+    {
+      ScopedExceptionHandler handler(this, &done_hook, nullptr);
+      Call(context, promise_hook, UndefinedConstant(), promise);
+    }
     Goto(&done_hook);
   }
   BIND(&done_hook);

@@ -73,6 +73,9 @@ PromiseConstructor(
     result = UnsafeCast<JSPromise>(
         FastNewObject(context, promiseFun, UnsafeCast<JSReceiver>(newTarget)));
     PromiseInit(result);
+    RunContextPromiseHook(
+        ContextSlot::PROMISE_HOOK_INIT_FUNCTION_INDEX, result, Undefined);
+
     if (IsPromiseHookEnabledOrHasAsyncEventDelegate()) {
       runtime::PromiseHookInit(result, Undefined);
     }

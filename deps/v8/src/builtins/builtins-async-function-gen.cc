@@ -25,6 +25,10 @@ class AsyncFunctionBuiltinsAssembler : public AsyncBuiltinsAssembler {
   void AsyncFunctionAwaitResumeClosure(
       const TNode<Context> context, const TNode<Object> sent_value,
       JSGeneratorObject::ResumeMode resume_mode);
+
+  void RunContextPromiseHook(int id, TNode<Context> context,
+                             TNode<HeapObject> promise_or_capability,
+                             TNode<HeapObject> parent);
 };
 
 void AsyncFunctionBuiltinsAssembler::AsyncFunctionAwaitResumeClosure(
@@ -157,6 +161,9 @@ TF_BUILTIN(AsyncFunctionEnter, AsyncFunctionBuiltinsAssembler) {
   StoreObjectFieldNoWriteBarrier(
       async_function_object, JSAsyncFunctionObject::kPromiseOffset, promise);
 
+  RunContextPromiseHook(Context::PROMISE_HOOK_INIT_FUNCTION_INDEX, context,
+                        promise, UndefinedConstant());
+
   // Fire promise hooks if enabled and push the Promise under construction
   // in an async function on the catch prediction stack to handle exceptions
   // thrown before the first await.
@@ -172,6 +179,38 @@ TF_BUILTIN(AsyncFunctionEnter, AsyncFunctionBuiltinsAssembler) {
   BIND(&if_instrumentation_done);
 
   Return(async_function_object);
+}
+
+void AsyncFunctionBuiltinsAssembler::RunContextPromiseHook(
+    int id, TNode<Context> context, TNode<HeapObject> promise_or_capability,
+    TNode<HeapObject> parent) {
+  DCHECK(id >= Context::PROMISE_HOOK_INIT_FUNCTION_INDEX &&
+         id <= Context::PROMISE_HOOK_RESOLVE_FUNCTION_INDEX);
+  TNode<NativeContext> native_context = LoadNativeContext(context);
+  const TNode<Object> promise_hook_obj = LoadContextElement(native_context, id);
+
+  Label hook(this, Label::kDeferred), done_hook(this);
+
+  Branch(IsUndefined(promise_hook_obj), &done_hook, &hook);
+  BIND(&hook);
+  {
+    const TNode<JSFunction> promise_hook = CAST(promise_hook_obj);
+    // Get to the underlying JSPromise instance.
+    TNode<HeapObject> promise = Select<HeapObject>(
+        IsPromiseCapability(promise_or_capability),
+        [=] {
+          return CAST(LoadObjectField(promise_or_capability,
+                                      PromiseCapability::kPromiseOffset));
+        },
+        [=] { return promise_or_capability; });
+    GotoIf(IsUndefined(promise), &done_hook);
+    {
+      ScopedExceptionHandler handler(this, &done_hook, nullptr);
+      Call(context, promise_hook, UndefinedConstant(), promise, parent);
+    }
+    Goto(&done_hook);
+  }
+  BIND(&done_hook);
 }
 
 TF_BUILTIN(AsyncFunctionReject, AsyncFunctionBuiltinsAssembler) {

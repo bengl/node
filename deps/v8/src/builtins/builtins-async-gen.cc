@@ -99,16 +99,30 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOld(
 
   TVARIABLE(HeapObject, var_throwaway, UndefinedConstant());
 
+  RunContextPromiseHook(Context::PROMISE_HOOK_INIT_FUNCTION_INDEX, context,
+                        promise, outer_promise);
+
   // Deal with PromiseHooks and debug support in the runtime. This
   // also allocates the throwaway promise, which is only needed in
   // case of PromiseHooks or debugging.
-  Label if_debugging(this, Label::kDeferred), do_resolve_promise(this);
+  Label if_debugging(this, Label::kDeferred),
+        if_promise_hook(this, Label::kDeferred),
+        not_debugging(this),
+        do_resolve_promise(this);
   Branch(IsPromiseHookEnabledOrDebugIsActiveOrHasAsyncEventDelegate(),
-         &if_debugging, &do_resolve_promise);
+         &if_debugging, &not_debugging);
   BIND(&if_debugging);
   var_throwaway =
       CAST(CallRuntime(Runtime::kAwaitPromisesInitOld, context, value, promise,
                        outer_promise, on_reject, is_predicted_as_caught));
+  Goto(&do_resolve_promise);
+  BIND(&not_debugging);
+
+  const TNode<Object> promise_hook_obj = LoadContextElement(
+      native_context, Context::PROMISE_HOOK_INIT_FUNCTION_INDEX);
+  Branch(IsUndefined(promise_hook_obj), &do_resolve_promise, &if_promise_hook);
+  BIND(&if_promise_hook);
+  var_throwaway = NewJSPromise(context, promise);
   Goto(&do_resolve_promise);
   BIND(&do_resolve_promise);
 
@@ -173,13 +187,25 @@ TNode<Object> AsyncBuiltinsAssembler::AwaitOptimized(
   // Deal with PromiseHooks and debug support in the runtime. This
   // also allocates the throwaway promise, which is only needed in
   // case of PromiseHooks or debugging.
-  Label if_debugging(this, Label::kDeferred), do_perform_promise_then(this);
+  Label if_debugging(this, Label::kDeferred),
+      if_promise_hook(this, Label::kDeferred),
+      not_debugging(this),
+      do_perform_promise_then(this);
   Branch(IsPromiseHookEnabledOrDebugIsActiveOrHasAsyncEventDelegate(),
-         &if_debugging, &do_perform_promise_then);
+         &if_debugging, &not_debugging);
   BIND(&if_debugging);
   var_throwaway =
       CAST(CallRuntime(Runtime::kAwaitPromisesInit, context, promise, promise,
                        outer_promise, on_reject, is_predicted_as_caught));
+  Goto(&do_perform_promise_then);
+  BIND(&not_debugging);
+
+  const TNode<Object> promise_hook_obj = LoadContextElement(
+      native_context, Context::PROMISE_HOOK_INIT_FUNCTION_INDEX);
+  Branch(IsUndefined(promise_hook_obj), &do_perform_promise_then,
+         &if_promise_hook);
+  BIND(&if_promise_hook);
+  var_throwaway = NewJSPromise(context, promise);
   Goto(&do_perform_promise_then);
   BIND(&do_perform_promise_then);
 
@@ -300,6 +326,38 @@ TNode<Context> AsyncBuiltinsAssembler::AllocateAsyncIteratorValueUnwrapContext(
   StoreContextElementNoWriteBarrier(context, ValueUnwrapContext::kDoneSlot,
                                     done);
   return context;
+}
+
+void AsyncBuiltinsAssembler::RunContextPromiseHook(
+    int id, TNode<Context> context, TNode<HeapObject> promise_or_capability,
+    TNode<HeapObject> parent) {
+  DCHECK(id >= Context::PROMISE_HOOK_INIT_FUNCTION_INDEX &&
+         id <= Context::PROMISE_HOOK_RESOLVE_FUNCTION_INDEX);
+  TNode<NativeContext> native_context = LoadNativeContext(context);
+  const TNode<Object> promise_hook_obj = LoadContextElement(native_context, id);
+
+  Label hook(this, Label::kDeferred), done_hook(this);
+
+  Branch(IsUndefined(promise_hook_obj), &done_hook, &hook);
+  BIND(&hook);
+  {
+    const TNode<JSFunction> promise_hook = CAST(promise_hook_obj);
+    // Get to the underlying JSPromise instance.
+    TNode<HeapObject> promise = Select<HeapObject>(
+            IsPromiseCapability(promise_or_capability),
+            [=] {
+              return CAST(LoadObjectField(promise_or_capability,
+                                          PromiseCapability::kPromiseOffset));
+            },
+            [=] { return promise_or_capability; });
+    GotoIf(IsUndefined(promise), &done_hook);
+    {
+      ScopedExceptionHandler handler(this, &done_hook, nullptr);
+      Call(context, promise_hook, UndefinedConstant(), promise, parent);
+    }
+    Goto(&done_hook);
+  }
+  BIND(&done_hook);
 }
 
 TF_BUILTIN(AsyncIteratorValueUnwrap, AsyncBuiltinsAssembler) {

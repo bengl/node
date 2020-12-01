@@ -1639,6 +1639,16 @@ void Shell::AsyncHooksTriggerAsyncId(
       PerIsolateData::Get(isolate)->GetAsyncHooks()->GetTriggerAsyncId()));
 }
 
+void Shell::SetPromiseHooks(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  Isolate* isolate = args.GetIsolate();
+  Local<Context> context = isolate->GetCurrentContext();
+  HandleScope handle_scope(isolate);
+
+  context->SetPromiseHooks(args[0], args[1], args[2], args[3]);
+
+  args.GetReturnValue().Set(v8::Undefined(isolate));
+}
+
 void WriteToFile(FILE* file, const v8::FunctionCallbackInfo<v8::Value>& args) {
   for (int i = 0; i < args.Length(); i++) {
     HandleScope handle_scope(args.GetIsolate());
@@ -2333,6 +2343,14 @@ Local<ObjectTemplate> Shell::CreateD8Template(Isolate* isolate) {
                       FunctionTemplate::New(isolate, LogGetAndStop));
 
     d8_template->Set(isolate, "log", log_template);
+  }
+  {
+    Local<ObjectTemplate> promise_template = ObjectTemplate::New(isolate);
+    promise_template->Set(
+        isolate, "setHooks",
+        FunctionTemplate::New(isolate, SetPromiseHooks, Local<Value>(),
+                              Local<Signature>(), 4));
+    d8_template->Set(isolate, "promise", promise_template);
   }
   return d8_template;
 }

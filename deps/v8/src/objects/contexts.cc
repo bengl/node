@@ -511,5 +511,52 @@ STATIC_ASSERT(NativeContext::kSize ==
               (Context::SizeFor(NativeContext::NATIVE_CONTEXT_SLOTS) +
                kSystemPointerSize));
 
+void NativeContext::RunPromiseHook(PromiseHookType type,
+                                   Handle<JSPromise> promise,
+                                   Handle<Object> parent) {
+  bool isInit = false;
+  int contextSlot;
+
+  switch (type) {
+    case PromiseHookType::kInit:
+      contextSlot = PROMISE_HOOK_INIT_FUNCTION_INDEX;
+      isInit = true;
+      break;
+    case PromiseHookType::kResolve:
+      contextSlot = PROMISE_HOOK_RESOLVE_FUNCTION_INDEX;
+      break;
+    case PromiseHookType::kBefore:
+      contextSlot = PROMISE_HOOK_BEFORE_FUNCTION_INDEX;
+      break;
+    case PromiseHookType::kAfter:
+      contextSlot = PROMISE_HOOK_AFTER_FUNCTION_INDEX;
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  Isolate* isolate = promise->GetIsolate();
+  Handle<Object> hook(isolate->native_context()->get(contextSlot), isolate);
+  if (hook->IsUndefined()) return;
+
+  int argc = isInit ? 2 : 1;
+  ScopedVector<Handle<Object>> argv(argc);
+  argv[0] = Handle<Object>::cast(promise);
+  if (isInit) {
+    argv[1] = parent;
+  }
+
+  bool success = false;
+  Handle<Object> result;
+  Handle<Object> receiver = isolate->global_proxy();
+  success = Execution::Call(isolate, hook, receiver, argc, argv.begin())
+                .ToHandle(&result);
+
+  // Discard hook exceptions for now. Need to figure out a better solution.
+  if (!success) {
+    isolate->clear_pending_exception();
+  }
+}
+
 }  // namespace internal
 }  // namespace v8

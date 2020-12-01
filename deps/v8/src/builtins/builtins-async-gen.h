@@ -62,6 +62,10 @@ class AsyncBuiltinsAssembler : public PromiseBuiltinsAssembler {
                                TNode<SharedFunctionInfo> on_resolve_sfi,
                                TNode<SharedFunctionInfo> on_reject_sfi,
                                TNode<Oddball> is_predicted_as_caught);
+
+  void RunContextPromiseHook(int id, TNode<Context> context,
+                             TNode<HeapObject> promise_or_capability,
+                             TNode<HeapObject> parent);
 };
 
 }  // namespace internal
