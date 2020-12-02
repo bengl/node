@@ -452,6 +452,15 @@ static void EnablePromiseHook(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+static void SetPromiseHooks(const FunctionCallbackInfo<Value>& args) {
+  Environment* env = Environment::GetCurrent(args);
+  Local<Context> ctx = env->context();
+  Local<Value> init_hook = args[0];
+  Local<Value> before_hook = args[1];
+  Local<Value> after_hook = args[2];
+  Local<Value> resolve_hook = args[3];
+  ctx->SetPromiseHooks(init_hook, before_hook, after_hook, resolve_hook);
+}
 
 static void DisablePromiseHook(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
@@ -631,6 +640,7 @@ void AsyncWrap::Initialize(Local<Object> target,
   env->SetMethod(target, "clearAsyncIdStack", ClearAsyncIdStack);
   env->SetMethod(target, "queueDestroyAsyncId", QueueDestroyAsyncId);
   env->SetMethod(target, "enablePromiseHook", EnablePromiseHook);
+  env->SetMethod(target, "setPromiseHooks", SetPromiseHooks);
   env->SetMethod(target, "disablePromiseHook", DisablePromiseHook);
   env->SetMethod(target, "registerDestroyHook", RegisterDestroyHook);
 
@@ -726,6 +736,7 @@ void AsyncWrap::RegisterExternalReferences(
   registry->Register(QueueDestroyAsyncId);
   registry->Register(EnablePromiseHook);
   registry->Register(DisablePromiseHook);
+  registry->Register(SetPromiseHooks);
   registry->Register(RegisterDestroyHook);
   registry->Register(AsyncWrap::GetAsyncId);
   registry->Register(AsyncWrap::AsyncReset);
