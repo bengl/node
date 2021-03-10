@@ -6,7 +6,6 @@ const assert = require('assert');
 
 // Assert that allowed internalBinding modules are accessible via
 // process.binding().
-assert(process.binding('async_wrap'));
 assert(process.binding('buffer'));
 assert(process.binding('cares_wrap'));
 assert(process.binding('constants'));
