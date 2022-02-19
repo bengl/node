@@ -89,6 +89,8 @@ rules:
       message: Use `const { clearInterval } = require('timers');` instead of the global.
     - name: clearTimeout
       message: Use `const { clearTimeout } = require('timers');` instead of the global.
+    - name: console
+      message: Use `const { console } = require('internal/console/global');` instead of the global.
     - name: fetch
       message: Use `const { fetch } = require('internal/deps/undici/undici');` instead of the global.
     - name: global
