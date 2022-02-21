@@ -181,7 +181,7 @@ See [Advanced serialization for `child_process`][] for more details.
 
 <!-- YAML
 added: v10.12.0
-deprecated: REPLACEME
+deprecated: 17.5.1
 -->
 
 > Stability: 0 - Deprecated
