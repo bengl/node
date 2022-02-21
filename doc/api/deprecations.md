@@ -3064,11 +3064,11 @@ This method was deprecated because it is not compatible with
 
 Use [`buffer.subarray`][] which does the same thing instead.
 
-### DEPXXXX: `process.on('multipleResolves', handler)`
+### DEP0159: `process.on('multipleResolves', handler)`
 
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: 17.6.0
     pr-url: https://github.com/nodejs/node/pull/41872
     description: Documentation-only deprecation.
 -->
@@ -3078,11 +3078,11 @@ Type: Documentation-only
 This event was deprecated because it did not work with V8 promise combinators
 which diminished its usefulness.
 
-### DEP0161: `process._getActiveRequests()` and `process._getActiveHandles()`
+### DEP0160: `process._getActiveRequests()` and `process._getActiveHandles()`
 
 <!-- YAML
 changes:
-  - version: REPLACEME
+  - version: 17.6.0
     pr-url: https://github.com/nodejs/node/pull/41587
     description: Documentation-only deprecation.
 -->
